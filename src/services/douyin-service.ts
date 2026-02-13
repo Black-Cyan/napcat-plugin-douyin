@@ -2,6 +2,26 @@ import type { OB11Message } from 'napcat-types/napcat-onebot';
 import type { NapCatPluginContext } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../core/state';
 
+async function setMsgEmojiLike(
+    ctx: NapCatPluginContext,
+    messageId: number | string,
+    emojiId: string,
+): Promise<void> {
+    try {
+        await ctx.actions.call(
+            'set_msg_emoji_like',
+            { message_id: messageId, emoji_id: emojiId },
+            ctx.adapterName,
+            ctx.pluginManager.config,
+        );
+        if (pluginState.config.debug) {
+            pluginState.logger.debug(`表情回复成功: message_id=${messageId}, emoji_id=${emojiId}`);
+        }
+    } catch (err) {
+        pluginState.logger.warn('设置表情回复失败:', err);
+    }
+}
+
 interface DouyinVideoInfo {
     awemeId: string;
     desc: string;
@@ -362,6 +382,11 @@ export async function processDouyinShare(
     const urls = extractDouyinUrls(rawMessage);
     if (!urls.length) return false;
 
+    // 解析前贴闪光表情，提示开始处理
+    if (event.message_id) {
+        await setMsgEmojiLike(ctx, event.message_id, '10024');
+    }
+
     if (pluginState.config.debug) {
         pluginState.logger.debug(`检测到 ${urls.length} 个抖音链接: ${urls.join(', ')}`);
     }
@@ -420,6 +445,9 @@ export async function processDouyinShare(
             pluginState.logger.info(`已解析抖音作品 ${info.awemeId} 并转发到群 ${groupId}`);
             pluginState.incrementProcessed();
             dedupMap.set(dedupKey, Date.now());
+            if (event.message_id) {
+                await setMsgEmojiLike(ctx, event.message_id, '124');
+            }
             return true;
         }
     }

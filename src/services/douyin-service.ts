@@ -334,6 +334,29 @@ async function sendForwardVideo(
     }
 }
 
+async function sendGroupEmojiLike(
+    ctx: NapCatPluginContext,
+    groupId: number | string,
+    messageId: number | string | undefined,
+    emojiId: string
+): Promise<void> {
+    if (!messageId) return;
+    try {
+        await ctx.actions.call(
+            'group_msg_emoji_like',
+            {
+                group_id: String(groupId),
+                message_id: String(messageId),
+                emoji_id: emojiId,
+            } as never,
+            ctx.adapterName,
+            ctx.pluginManager.config,
+        );
+    } catch (err) {
+        pluginState.logger.warn(`发送消息表情点赞失败 emoji_id=${emojiId}:`, err);
+    }
+}
+
 export async function processDouyinShare(
     ctx: NapCatPluginContext,
     event: OB11Message
@@ -368,6 +391,7 @@ export async function processDouyinShare(
 
     // 即便未开启调试，也在检测到链接时输出一次 info，便于确认触发
     pluginState.logger.info(`检测到抖音链接，开始解析 | 群 ${groupId}`);
+    await sendGroupEmojiLike(ctx, groupId, event.message_id, '10024');
 
     for (const url of urls) {
         // 先用 mmp.cc 接口直接解析
@@ -417,6 +441,7 @@ export async function processDouyinShare(
 
         const sent = await sendForwardVideo(ctx, groupId, info, allowVideo);
         if (sent) {
+            await sendGroupEmojiLike(ctx, groupId, event.message_id, '124');
             pluginState.logger.info(`已解析抖音作品 ${info.awemeId} 并转发到群 ${groupId}`);
             pluginState.incrementProcessed();
             dedupMap.set(dedupKey, Date.now());

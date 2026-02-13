@@ -1,0 +1,14 @@
+{
+	"servers": {
+		"napcat-apifox-mcp": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"apifox-mcp-server@latest",
+				"--site-id=5348325"
+			]
+		}
+	},
+	"inputs": []
+}

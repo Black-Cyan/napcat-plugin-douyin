@@ -19,10 +19,11 @@
   ],
   "napcat": {
     "tags": [
-      "工具"
+      "工具",
+      "娱乐"
     ],
     "minVersion": "4.14.0",
-    "homepage": ""
+    "homepage": "https://github.com/Black-Cyan/napcat-plugin-douyin"
   },
   "dependencies": {
     "napcat-types": "0.0.16"

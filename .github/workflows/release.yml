@@ -64,7 +64,7 @@ jobs:
 
       - name: Prepare release package
         env:
-          PLUGIN_NAME: napcat-plugin-template
+          PLUGIN_NAME: napcat-plugin-douyin
         run: |
           # 创建临时目录用于组织文件
           mkdir -p release
@@ -80,7 +80,7 @@ jobs:
 
       - name: Verify zip contents
         run: |
-          PLUGIN_NAME="napcat-plugin-template"
+          PLUGIN_NAME="napcat-plugin-douyin"
           unzip -l ${PLUGIN_NAME}.zip
 
       - name: Collect git log
@@ -242,7 +242,7 @@ jobs:
           body_path: CHANGELOG.md
           draft: false
           files: |
-            napcat-plugin-template.zip
+            napcat-plugin-douyin.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

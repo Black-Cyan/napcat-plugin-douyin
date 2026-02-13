@@ -29,11 +29,11 @@
 1. 克隆仓库：
 
 ```bash
-    # https
-    git clone https://github.com/Black-Cyan/napcat-plugin-douyin.git
-    # ssh
-    git clone git@github.com:Black-Cyan/napcat-plugin-douyin.git
-    cd napcat-plugin-bilibili
+# https
+git clone https://github.com/Black-Cyan/napcat-plugin-douyin.git
+# ssh
+git clone git@github.com:Black-Cyan/napcat-plugin-douyin.git
+cd napcat-plugin-bilibili
 ```
 
 2. 安装依赖并进行构建：

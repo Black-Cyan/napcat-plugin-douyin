@@ -1,0 +1,79 @@
+name: 🐞 Bug 反馈
+description: 报告插件运行异常或功能错误
+title: "[BUG] "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈问题。
+        请务必填写完整信息，否则可能会被直接关闭。
+
+  - type: input
+    id: plugin_version
+    attributes:
+      label: 插件版本
+      description: 请填写当前使用的 napcat-plugin-douyin 版本号
+      placeholder: 例如：v1.0.1
+    validations:
+      required: true
+
+  - type: input
+    id: napcat_version
+    attributes:
+      label: NapCat 版本
+      description: 请填写当前 NapCat 版本
+      placeholder: 例如：v4.16.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 请详细描述如何复现该问题
+      placeholder: |
+        1. 发送抖音分享链接
+        2. 插件开始解析
+        3. 出现错误...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 正常情况下你认为应该发生什么？
+      placeholder: 插件应成功下载视频并发送到群聊
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 控制台报错日志
+      description: 请粘贴完整报错日志（不要只截取一行）
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: link_example
+    attributes:
+      label: 问题视频链接示例
+      description: 请提供一个出现问题的抖音分享链接
+      placeholder: https://v.douyin.com/xxxxxx/
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认阅读 README
+          required: true
+        - label: 我已确认填写完整信息
+          required: true

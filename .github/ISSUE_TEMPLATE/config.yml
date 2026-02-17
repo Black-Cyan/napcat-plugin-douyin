@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 使用说明 / 文档
+    url: https://github.com/Black-Cyan/napcat-plugin-douyin/blob/main/README.md
+    about: 请先阅读 README 和使用说明，再提交 Issue。

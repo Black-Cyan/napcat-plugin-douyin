@@ -29,40 +29,33 @@ interface DouyinVideoInfo {
     playUrl?: string;
     images?: string[];
     cover?: string;
+    likes?: number;
     type: 'video' | 'image';
     sourceUrl: string;
 }
 
-interface DouyinApiResponse {
-    item_list?: Array<{
-        aweme_id?: string;
-        desc?: string;
-        author?: { nickname?: string };
-        video?: {
-            cover?: { url_list?: string[] };
-            play_addr?: { url_list?: string[] };
-            download_addr?: { url_list?: string[] };
-        };
-    }>;
-}
-
-interface MmpApiResponse {
+interface XhusApiResponse {
     code?: number;
+    msg?: string;
     data?: {
-        type?: string;
-        video_url?: string;
-        video_url_HQ?: string;
-        image_url?: string[];
-        nickname?: string;
-        desc?: string;
-        aweme_id?: string;
+        author?: string;
+        uid?: string | number;
+        avatar?: string;
+        like?: number;
+        time?: number;
+        title?: string;
+        cover?: string;
+        images?: string[] | string;
+        url?: string;
+        music?: unknown;
     };
 }
 
-type DouyinVideo = NonNullable<DouyinApiResponse['item_list']>[number]['video'];
-
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 10; Pixel 5 Build/QQ3A.200805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.0.0 Mobile Safari/537.36';
+const GROUP_FILE_SIZE_LIMIT_MB = 100;
 const dedupMap = new Map<string, number>();
+
+type VideoSendMode = 'inline' | 'text_only' | 'upload_group_file';
 
 function extractDouyinUrls(text: string): string[] {
     const urlMatches = text.match(/https?:\/\/[^\s]+/g) || [];
@@ -76,58 +69,6 @@ function extractDouyinUrls(text: string): string[] {
                 return false;
             }
         });
-}
-
-function extractAwemeIdFromUrl(urlStr: string): string | null {
-    try {
-        const url = new URL(urlStr);
-        const modalId = url.searchParams.get('modal_id');
-        if (modalId && /^\d+$/.test(modalId)) return modalId;
-    } catch {
-        /* noop */
-    }
-    const patterns = [
-        /video\/(\d+)/,
-        /share\/video\/(\d+)/,
-        /aweme_id=(\d+)/,
-        /modal_id=(\d+)/,
-    ];
-    for (const reg of patterns) {
-        const match = urlStr.match(reg);
-        if (match?.[1]) return match[1];
-    }
-    return null;
-}
-
-function extractAwemeIdFromHtml(html: string): string | null {
-    const match = html.match(/itemId":"(\d+)"/) || html.match(/aweme_id":"(\d+)"/);
-    return match?.[1] ?? null;
-}
-
-function buildHeaders(url: string): Record<string, string> {
-    return {
-        'User-Agent': MOBILE_UA,
-        Referer: 'https://www.douyin.com/',
-        Origin: 'https://www.douyin.com',
-        Host: new URL(url).hostname,
-    };
-}
-
-async function resolveAwemeId(url: string): Promise<{ awemeId: string; finalUrl: string } | null> {
-    try {
-        const res = await fetch(url, { headers: buildHeaders(url) });
-        const finalUrl = res.url || url;
-        let awemeId = extractAwemeIdFromUrl(finalUrl);
-        if (!awemeId) {
-            const html = await res.text();
-            awemeId = extractAwemeIdFromHtml(html);
-        }
-        if (!awemeId) return null;
-        return { awemeId, finalUrl };
-    } catch (err) {
-        pluginState.logger.warn('解析抖音链接失败:', err);
-        return null;
-    }
 }
 
 async function fetchVideoSizeMb(url: string): Promise<number | null> {
@@ -144,101 +85,67 @@ async function fetchVideoSizeMb(url: string): Promise<number | null> {
     }
 }
 
-function pickPlayUrl(video?: DouyinVideo): string | null {
-    if (!video) return null;
-    const urlList = video.play_addr?.url_list || video.download_addr?.url_list || [];
-    if (!urlList.length) return null;
-    const clean = urlList.find((u) => !u.includes('playwm')) || urlList[0];
-    return clean || null;
-}
-
-async function fetchDouyinInfo(awemeId: string, sourceUrl: string): Promise<DouyinVideoInfo | null> {
-    const api = `https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids=${awemeId}`;
+function applyQualityToUrl(playUrl: string): string {
     try {
-        const res = await fetch(api, { headers: buildHeaders(api) });
-        if (!res.ok) {
-            pluginState.logger.warn(`抖音接口响应异常: ${res.status}`);
-            return null;
-        }
-
-        const raw = await res.text();
-        let json: DouyinApiResponse | null = null;
-        try {
-            json = raw ? JSON.parse(raw) as DouyinApiResponse : null;
-        } catch (parseErr) {
-            pluginState.logger.warn('解析抖音接口 JSON 失败:', parseErr);
-            return null;
-        }
-
-        if (!json) return null;
-        const item = json.item_list?.[0];
-        if (!item) return null;
-        const playUrl = pickPlayUrl(item.video as never);
-        if (!playUrl) return null;
-        return {
-            awemeId,
-            desc: item.desc || '',
-            author: item.author?.nickname || '抖音',
-            playUrl,
-            cover: item.video?.cover?.url_list?.[0],
-            type: 'video',
-            sourceUrl,
-        };
-    } catch (err) {
-        pluginState.logger.error('获取抖音视频信息失败:', err);
-        return null;
+        const url = new URL(playUrl);
+        const quality = pluginState.config.douyinVideoQuality === 'high' ? '1080p' : '720p';
+        url.searchParams.set('ratio', quality);
+        return url.toString();
+    } catch {
+        return playUrl;
     }
 }
 
-async function fetchViaMmpApi(shareUrl: string): Promise<DouyinVideoInfo | null> {
-    const api = `https://api.mmp.cc/api/Jiexi?url=${encodeURIComponent(shareUrl)}`;
+async function fetchViaXhusApi(shareUrl: string): Promise<DouyinVideoInfo | null> {
+    const api = `http://api.xhus.cn/api/douyin?url=${encodeURIComponent(shareUrl)}`;
     try {
         const res = await fetch(api, { headers: { 'User-Agent': MOBILE_UA } });
         if (!res.ok) {
-            pluginState.logger.warn(`mmp.cc 接口响应异常: ${res.status}`);
+            pluginState.logger.warn(`xhus 接口响应异常: ${res.status}`);
             return null;
         }
-
         const raw = await res.text();
-        let json: MmpApiResponse | null = null;
+        let json: XhusApiResponse | null = null;
         try {
-            json = raw ? JSON.parse(raw) as MmpApiResponse : null;
+            json = raw ? JSON.parse(raw) as XhusApiResponse : null;
         } catch (parseErr) {
-            pluginState.logger.warn('解析 mmp.cc 接口 JSON 失败:', parseErr);
+            pluginState.logger.warn('解析 xhus 接口 JSON 失败:', parseErr);
             return null;
         }
-
-        const data = json?.data;
-        if (!data || json?.code !== 200) return null;
-        const awemeId = data.aweme_id || extractAwemeIdFromUrl(shareUrl) || 'unknown';
-        if (data.type === 'image') {
-            const images = Array.isArray(data.image_url) ? data.image_url.filter(Boolean) as string[] : [];
-            if (!images.length) return null;
+        if (!json || json.code !== 200 || !json.data) return null;
+        const data = json.data;
+        const awemeId = String(data.uid ?? Date.now());
+        const author = data.author || '抖音';
+        const desc = data.title || '';
+        const likeNum = typeof data.like === 'number' ? data.like : Number(data.like);
+        const likes = Number.isFinite(likeNum) ? likeNum : undefined;
+        const images = Array.isArray(data.images) ? data.images.filter(Boolean) as string[] : null;
+        if (images && images.length) {
             return {
                 awemeId,
-                desc: data.desc || '',
-                author: data.nickname || '抖音',
+                desc,
+                author,
                 images,
+                cover: data.cover,
+                likes,
                 type: 'image',
                 sourceUrl: shareUrl,
             };
         }
-
-        // 优先使用 video_url，HQ 仅作为兜底
-        const playUrl = (data as { video_url?: string; video_url_HQ?: string }).video_url
-            || (data as { video_url_HQ?: string }).video_url_HQ;
-        if (!playUrl) return null;
-
+        if (!data.url) return null;
+        const playUrl = applyQualityToUrl(data.url);
         return {
             awemeId,
-            desc: data.desc || '',
-            author: data.nickname || '抖音',
+            desc,
+            author,
             playUrl,
+            cover: data.cover,
+            likes,
             type: 'video',
             sourceUrl: shareUrl,
         };
     } catch (err) {
-        pluginState.logger.error('调用 mmp.cc 解析接口失败:', err);
+        pluginState.logger.error('调用 xhus 解析接口失败:', err);
         return null;
     }
 }
@@ -252,33 +159,150 @@ interface ForwardNode {
     };
 }
 
+async function uploadVideoToGroupFile(
+    ctx: NapCatPluginContext,
+    groupId: number | string,
+    info: DouyinVideoInfo,
+    sizeMb: number | null,
+): Promise<{ success: boolean; fileName?: string }> {
+    if (!info.playUrl) return { success: false };
+    const fileName = `douyin_${info.awemeId || Date.now()}.mp4`;
+    try {
+        await ctx.actions.call(
+            'upload_group_file',
+            {
+                group_id: String(groupId),
+                file: info.playUrl,
+                name: fileName,
+            },
+            ctx.adapterName,
+            ctx.pluginManager.config,
+        );
+        const sizeLabel = sizeMb !== null ? `${sizeMb.toFixed(1)}MB` : '未知大小';
+        pluginState.logger.info(`视频体积 ${sizeLabel} 超过 ${GROUP_FILE_SIZE_LIMIT_MB}MB，已上传为群文件 | 群 ${groupId}`);
+        return { success: true, fileName };
+    } catch (err) {
+        pluginState.logger.error('上传视频到群文件失败:', err);
+        return { success: false, fileName };
+    }
+}
+
 async function sendForwardVideo(
     ctx: NapCatPluginContext,
     groupId: number | string,
     info: DouyinVideoInfo,
-    allowVideo: boolean
+    mode: VideoSendMode,
+    sizeMb: number | null,
 ): Promise<boolean> {
+    const preferDirect = pluginState.config.douyinVideoSendMode === 'direct';
     const nickname = pluginState.config.douyinForwardNickname || '抖音解析';
     const selfId = pluginState.selfId || '10000';
     const descLine = info.desc || '分享的抖音视频';
     const baseTextLines = [`${info.author}：${descLine}`];
+    if (typeof info.likes === 'number') {
+        baseTextLines.push(`点赞: ${info.likes}`);
+    }
+    if (sizeMb !== null && info.type === 'video') {
+        baseTextLines.push(`视频大小: ${sizeMb.toFixed(1)}MB`);
+    }
     if (info.type === 'video' && info.playUrl) {
         baseTextLines.push(`视频直链: ${info.playUrl}`);
     }
     baseTextLines.push(`来源: ${info.sourceUrl}`);
+
+    const baseSegments: Array<{ type: string; data: Record<string, unknown> }> = [
+        { type: 'text', data: { text: baseTextLines.join('\n') } },
+    ];
+    if (info.type === 'video' && info.cover) {
+        baseSegments.push({ type: 'image', data: { file: info.cover } });
+    }
 
     const baseNode: ForwardNode = {
         type: 'node',
         data: {
             nickname,
             user_id: selfId,
-            content: [
-                { type: 'text', data: { text: baseTextLines.join('\n') } },
-            ],
+            content: baseSegments,
         },
     };
 
     const nodes: ForwardNode[] = [baseNode];
+
+    if (info.type === 'video' && mode === 'upload_group_file') {
+        const uploadRes = await uploadVideoToGroupFile(ctx, groupId, info, sizeMb);
+        const noticeLines = [
+            `${info.author}：${descLine}`,
+            typeof info.likes === 'number' ? `点赞: ${info.likes}` : undefined,
+            sizeMb !== null ? `视频大小: ${sizeMb.toFixed(1)}MB` : undefined,
+            uploadRes.success
+                ? `已上传为群文件：${uploadRes.fileName || '视频文件'}`
+                : '尝试上传群文件失败，未直接发送视频',
+            info.playUrl ? '视频直链: ' + info.playUrl : undefined,
+            '超过 100MB 会以群文件方式发送，超过配置但未满 100MB 的视频不会直接发送',
+            `来源: ${info.sourceUrl}`,
+        ].filter(Boolean) as string[];
+
+        try {
+            const messageSegments: Array<{ type: string; data: Record<string, unknown> }> = [
+                { type: 'text', data: { text: noticeLines.join('\n') } },
+            ];
+            if (info.cover) {
+                messageSegments.push({ type: 'image', data: { file: info.cover } });
+            }
+
+            await ctx.actions.call(
+                'send_msg',
+                {
+                    message_type: 'group',
+                    group_id: String(groupId),
+                    message: messageSegments,
+                },
+                ctx.adapterName,
+                ctx.pluginManager.config,
+            );
+            return true;
+        } catch (err) {
+            pluginState.logger.error('发送上传提示消息失败:', err);
+            return false;
+        }
+    }
+
+    if (info.type === 'video' && preferDirect) {
+        const infoSegments = [...baseSegments];
+        if (mode === 'text_only') {
+            infoSegments.push({ type: 'text', data: { text: '视频大小超过配置限制，未直接发送；超过 100MB 将自动以群文件方式发送' } });
+        }
+
+        // 第一条：解析信息
+        try {
+            await ctx.actions.call(
+                'send_msg',
+                { message_type: 'group', group_id: String(groupId), message: infoSegments },
+                ctx.adapterName,
+                ctx.pluginManager.config,
+            );
+        } catch (err) {
+            pluginState.logger.error('发送视频信息消息失败:', err);
+            return false;
+        }
+
+        // 第二条：视频资源
+        if (mode === 'inline') {
+            try {
+                await ctx.actions.call(
+                    'send_msg',
+                    { message_type: 'group', group_id: String(groupId), message: [{ type: 'video', data: { file: info.playUrl } }] },
+                    ctx.adapterName,
+                    ctx.pluginManager.config,
+                );
+            } catch (err) {
+                pluginState.logger.error('直接发送视频资源失败:', err);
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     if (info.type === 'video') {
         const mediaNode: ForwardNode = {
@@ -286,14 +310,15 @@ async function sendForwardVideo(
             data: {
                 nickname: info.author || nickname,
                 user_id: selfId,
-                content: allowVideo ? [
+                content: mode === 'inline' ? [
                     { type: 'video', data: { file: info.playUrl } },
                 ] : [
-                    { type: 'text', data: { text: '视频因体积超限未直接发送，请使用直链查看' } },
+                    { type: 'text', data: { text: '视频大小超过配置限制，未直接发送；超过 100MB 将自动以群文件方式发送' } },
+                    ...(info.playUrl ? [{ type: 'text', data: { text: `视频直链: ${info.playUrl}` } }] : []),
                 ],
             },
         };
-        if (info.cover && allowVideo) {
+        if (info.cover && mode === 'inline') {
             mediaNode.data.content.push({ type: 'image', data: { file: info.cover } });
         }
         nodes.push(mediaNode);
@@ -328,6 +353,7 @@ async function sendForwardVideo(
             `${info.author}：${descLine}`,
             `来源: ${info.sourceUrl}`,
         ];
+        if (typeof info.likes === 'number') fallbackLines.splice(1, 0, `点赞: ${info.likes}`);
         if (info.type === 'video' && info.playUrl) fallbackLines.splice(1, 0, `视频直链: ${info.playUrl}`);
         if (info.type === 'image' && info.images?.length) {
             fallbackLines.push('图片直链:');
@@ -395,25 +421,12 @@ export async function processDouyinShare(
     pluginState.logger.info(`检测到抖音链接，开始解析 | 群 ${groupId}`);
 
     for (const url of urls) {
-        // 先用 mmp.cc 接口直接解析
-        let info = await fetchViaMmpApi(url);
-
-        // 回落到官方接口解析 awemeId
+        const info = await fetchViaXhusApi(url);
         if (!info) {
-            const resolved = await resolveAwemeId(url);
-            if (!resolved) {
-                if (pluginState.config.debug) {
-                    pluginState.logger.debug('未能从链接解析 awemeId: ' + url);
-                }
-                continue;
+            if (pluginState.config.debug) {
+                pluginState.logger.debug('未能解析抖音链接: ' + url);
             }
-            info = await fetchDouyinInfo(resolved.awemeId, resolved.finalUrl);
-            if (!info) {
-                if (pluginState.config.debug) {
-                    pluginState.logger.debug('未获取到视频信息 awemeId=' + resolved.awemeId);
-                }
-                continue;
-            }
+            continue;
         }
 
         // 去重：同群同链接在窗口内不重复发送
@@ -427,20 +440,22 @@ export async function processDouyinShare(
             }
         }
 
-        // 视频大小判定
-        let allowVideo = true;
-        if (info.type === 'video') {
+        // 视频大小判定与发送模式
+        let sendMode: VideoSendMode = 'inline';
+        let sizeMb: number | null = null;
+        if (info.type === 'video' && info.playUrl) {
+            sizeMb = await fetchVideoSizeMb(info.playUrl);
             const limitMb = pluginState.config.maxVideoSizeMb || 0;
-            if (limitMb > 0 && info.playUrl) {
-                const sizeMb = await fetchVideoSizeMb(info.playUrl);
-                if (sizeMb !== null && sizeMb > limitMb) {
-                    allowVideo = false;
-                    pluginState.logger.info(`视频大小 ${sizeMb.toFixed(1)}MB 超出上限 ${limitMb}MB，改为直链发送 | 群 ${groupId}`);
-                }
+            if (sizeMb !== null && sizeMb > GROUP_FILE_SIZE_LIMIT_MB) {
+                sendMode = 'upload_group_file';
+                pluginState.logger.info(`视频大小 ${sizeMb.toFixed(1)}MB 超过 ${GROUP_FILE_SIZE_LIMIT_MB}MB，优先上传到群文件 | 群 ${groupId}`);
+            } else if (limitMb > 0 && sizeMb !== null && sizeMb > limitMb) {
+                sendMode = 'text_only';
+                pluginState.logger.info(`视频大小 ${sizeMb.toFixed(1)}MB 超出上限 ${limitMb}MB，超过配置但未满 ${GROUP_FILE_SIZE_LIMIT_MB}MB 不发送视频 | 群 ${groupId}`);
             }
         }
 
-        const sent = await sendForwardVideo(ctx, groupId, info, allowVideo);
+        const sent = await sendForwardVideo(ctx, groupId, info, sendMode, sizeMb);
         if (sent) {
             pluginState.logger.info(`已解析抖音作品 ${info.awemeId} 并转发到群 ${groupId}`);
             pluginState.incrementProcessed();

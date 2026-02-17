@@ -35,6 +35,12 @@ function sanitizeConfig(raw: unknown): PluginConfig {
     if (typeof raw.debug === 'boolean') out.debug = raw.debug;
     if (typeof raw.douyinAutoParse === 'boolean') out.douyinAutoParse = raw.douyinAutoParse;
     if (typeof raw.douyinForwardNickname === 'string') out.douyinForwardNickname = raw.douyinForwardNickname;
+    if (raw.douyinVideoQuality === 'standard' || raw.douyinVideoQuality === 'high') {
+        out.douyinVideoQuality = raw.douyinVideoQuality;
+    }
+    if (raw.douyinVideoSendMode === 'forward' || raw.douyinVideoSendMode === 'direct') {
+        out.douyinVideoSendMode = raw.douyinVideoSendMode;
+    }
     if (typeof raw.maxVideoSizeMb === 'number') out.maxVideoSizeMb = raw.maxVideoSizeMb;
     if (typeof raw.dedupSeconds === 'number') out.dedupSeconds = raw.dedupSeconds;
 

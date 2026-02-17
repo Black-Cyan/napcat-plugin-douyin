@@ -22,6 +22,10 @@ export interface PluginConfig {
     douyinAutoParse: boolean;
     /** 合并转发时展示的昵称 */
     douyinForwardNickname: string;
+    /** 抖音视频质量选择（普通/高质量） */
+    douyinVideoQuality: 'standard' | 'high';
+    /** 视频发送方式（合并转发/直接发送） */
+    douyinVideoSendMode: 'forward' | 'direct';
     /** 视频大小上限（MB），超出仅发送文本和直链 */
     maxVideoSizeMb: number;
     /** 去重时间窗口（秒），同群同链接在窗口内不重复发送 */

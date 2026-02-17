@@ -12,6 +12,8 @@ export const DEFAULT_CONFIG: PluginConfig = {
     debug: false,
     douyinAutoParse: true,
     douyinForwardNickname: '抖音解析',
+    douyinVideoQuality: 'standard',
+    douyinVideoSendMode: 'forward',
     maxVideoSizeMb: 80,
     dedupSeconds: 300,
     groupConfigs: {},
@@ -47,8 +49,35 @@ export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema 
         ctx.NapCatConfig.boolean('douyinAutoParse', '自动解析抖音链接', true, '开启后自动解析群消息中的抖音分享链接并转发视频'),
         // 合并转发昵称
         ctx.NapCatConfig.text('douyinForwardNickname', '转发显示昵称', '抖音解析', '发送合并转发时展示的昵称'),
+        // 视频质量选择
+        ctx.NapCatConfig.select(
+            'douyinVideoQuality',
+            '视频质量',
+            [
+                { label: '普通', value: 'standard' },
+                { label: '高质量', value: 'high' },
+            ],
+            'standard',
+            '普通=720p，高质量=1080p；高质量体积更大',
+        ),
+        // 视频发送方式
+        ctx.NapCatConfig.select(
+            'douyinVideoSendMode',
+            '视频发送方式',
+            [
+                { label: '合并转发', value: 'forward' },
+                { label: '直接发送', value: 'direct' },
+            ],
+            'forward',
+            '为解决合并转发的视频资源过期问题，可选择直接逐条发送解析结果与视频资源。图文资源仍会以合并转发形式发送',
+        ),
         // 视频大小上限
-        ctx.NapCatConfig.number('maxVideoSizeMb', '视频大小上限 (MB)', 80, '超过此大小只发送文本和直链'),
+        ctx.NapCatConfig.number(
+            'maxVideoSizeMb',
+            '视频大小上限 (MB)',
+            80,
+            '超过此大小仅发送文本和直链；超过 100MB 会自动改为上传群文件，超过配置但未满 100MB 则不发送视频',
+        ),
         // 去重时间窗口
         ctx.NapCatConfig.number('dedupSeconds', '去重时间 (秒)', 300, '同群同链接在该时间内不会重复发送')
     );

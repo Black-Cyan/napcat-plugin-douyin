@@ -55,7 +55,7 @@ pnpm run build
 
 - [napcat-plugin-bilibili](https://github.com/AQiaoYo/napcat-plugin-bilibili) - 插件架构参考。
 
-- [远梦-API](https://api.mmp.cc/doc/Jiexi.html) - 第三方抖音解析接口。
+- [xhus 抖音解析接口](https://api.xhus.cn/doc/douyin.html) - 抖音解析接口。
 
 ## 许可证
 

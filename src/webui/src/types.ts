@@ -17,6 +17,8 @@ export interface PluginConfig {
     debug: boolean
     douyinAutoParse: boolean
     douyinForwardNickname: string
+    douyinVideoQuality: 'standard' | 'high'
+    douyinVideoSendMode: 'forward' | 'direct'
     maxVideoSizeMb: number
     dedupSeconds: number
     groupConfigs?: Record<string, GroupConfig>

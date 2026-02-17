@@ -96,9 +96,29 @@ export default function ConfigPage() {
                         value={config.douyinForwardNickname}
                         onChange={(v) => updateField('douyinForwardNickname', v || '抖音解析')}
                     />
+                    <SelectRow
+                        label="视频质量"
+                        desc="普通=720p，高质量=1080p，体积更大"
+                        value={config.douyinVideoQuality}
+                        options={[
+                            { label: '普通', value: 'standard' },
+                            { label: '高质量', value: 'high' },
+                        ]}
+                        onChange={(v) => updateField('douyinVideoQuality', v)}
+                    />
+                    <SelectRow
+                        label="视频发送方式"
+                        desc="为解决合并转发视频资源过期，可选择直接逐条发送。图文资源仍会以合并转发形式发送"
+                        value={config.douyinVideoSendMode}
+                        options={[
+                            { label: '合并转发', value: 'forward' },
+                            { label: '直接发送', value: 'direct' },
+                        ]}
+                        onChange={(v) => updateField('douyinVideoSendMode', v)}
+                    />
                     <InputRow
                         label="视频大小上限 (MB)"
-                        desc="超过此大小仅发送文本和直链"
+                        desc="超过 100MB 将上传为群文件，超过配置但未满 100MB 的视频不会发送"
                         value={String(config.maxVideoSizeMb)}
                         type="number"
                         onChange={(v) => updateField('maxVideoSizeMb', Math.max(0, Number(v) || 0))}
@@ -164,6 +184,30 @@ function InputRow({ label, desc, value, type = 'text', onChange }: {
                 onBlur={handleBlur}
                 onKeyDown={(e) => e.key === 'Enter' && handleBlur()}
             />
+        </div>
+    )
+}
+
+function SelectRow({ label, desc, value, options, onChange }: {
+    label: string
+    desc: string
+    value: string
+    options: Array<{ label: string; value: string }>
+    onChange: (v: any) => void
+}) {
+    return (
+        <div>
+            <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{label}</div>
+            <div className="text-xs text-gray-400 mb-2">{desc}</div>
+            <select
+                className="input-field"
+                value={value}
+                onChange={(e) => onChange(e.target.value as 'standard' | 'high')}
+            >
+                {options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+            </select>
         </div>
     )
 }

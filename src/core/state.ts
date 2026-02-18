@@ -43,6 +43,10 @@ function sanitizeConfig(raw: unknown): PluginConfig {
     }
     if (typeof raw.maxVideoSizeMb === 'number') out.maxVideoSizeMb = raw.maxVideoSizeMb;
     if (typeof raw.dedupSeconds === 'number') out.dedupSeconds = raw.dedupSeconds;
+    if (typeof raw.cacheDays === 'number' && Number.isFinite(raw.cacheDays)) {
+        out.cacheDays = Math.max(0, Math.floor(raw.cacheDays));
+    }
+    if (typeof raw.cacheClearTime === 'string') out.cacheClearTime = raw.cacheClearTime;
 
     // 群配置清洗
     if (isObject(raw.groupConfigs)) {

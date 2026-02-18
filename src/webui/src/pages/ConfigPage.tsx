@@ -7,6 +7,7 @@ import { IconTerminal } from '../components/icons'
 export default function ConfigPage() {
     const [config, setConfig] = useState<PluginConfig | null>(null)
     const [saving, setSaving] = useState(false)
+    const [clearing, setClearing] = useState(false)
 
     const fetchConfig = useCallback(async () => {
         try {
@@ -41,6 +42,22 @@ export default function ConfigPage() {
         setConfig(updated)
         saveConfig({ [key]: value })
     }
+
+    const clearCache = useCallback(async () => {
+        setClearing(true)
+        try {
+            const res = await noAuthFetch('/cache/clear', { method: 'POST' })
+            if (res.code === 0) {
+                showToast('缓存已清除', 'success')
+            } else {
+                showToast(res.message || '清除失败', 'error')
+            }
+        } catch {
+            showToast('清除失败', 'error')
+        } finally {
+            setClearing(false)
+        }
+    }, [])
 
     if (!config) {
         return (
@@ -130,6 +147,33 @@ export default function ConfigPage() {
                         type="number"
                         onChange={(v) => updateField('dedupSeconds', Math.max(0, Number(v) || 0))}
                     />
+                    <InputRow
+                        label="资源缓存时间 (天)"
+                        desc="过 0 点算一天，为 0 则不缓存"
+                        value={String(config.cacheDays)}
+                        type="number"
+                        onChange={(v) => updateField('cacheDays', Math.max(0, Math.floor(Number(v) || 0)))}
+                    />
+                    <InputRow
+                        label="每日清除缓存时间"
+                        desc="24 小时制 HH:mm，定时清空资源缓存与字符串池"
+                        value={config.cacheClearTime}
+                        type="time"
+                        onChange={(v) => updateField('cacheClearTime', v || '03:00')}
+                    />
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-sm font-medium text-gray-800 dark:text-gray-200">手动清除缓存</div>
+                            <div className="text-xs text-gray-400 mt-0.5">立即清除缓存资源与字符串池</div>
+                        </div>
+                        <button
+                            className="btn text-xs px-3 py-2 bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                            onClick={clearCache}
+                            disabled={clearing}
+                        >
+                            {clearing ? '清除中...' : '立即清除'}
+                        </button>
+                    </div>
                 </div>
             </div>
 

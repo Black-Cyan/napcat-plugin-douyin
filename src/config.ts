@@ -16,6 +16,8 @@ export const DEFAULT_CONFIG: PluginConfig = {
     douyinVideoSendMode: 'forward',
     maxVideoSizeMb: 80,
     dedupSeconds: 300,
+    cacheDays: 2,
+    cacheClearTime: '03:00',
     groupConfigs: {},
 };
 
@@ -79,6 +81,20 @@ export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema 
             '超过此大小仅发送文本和直链；超过 100MB 会自动改为上传群文件，超过配置但未满 100MB 则不发送视频',
         ),
         // 去重时间窗口
-        ctx.NapCatConfig.number('dedupSeconds', '去重时间 (秒)', 300, '同群同链接在该时间内不会重复发送')
+        ctx.NapCatConfig.number('dedupSeconds', '去重时间 (秒)', 300, '同群同链接在该时间内不会重复发送'),
+        // 缓存保留天数
+        ctx.NapCatConfig.number(
+            'cacheDays',
+            '资源缓存时间 (天)',
+            2,
+            '整数天，过 0 点算一天，为 0 则不缓存',
+        ),
+        // 每日清理时间
+        ctx.NapCatConfig.text(
+            'cacheClearTime',
+            '每日清除缓存时间',
+            '03:00',
+            '24 小时制 HH:mm，定时清空缓存资源与字符串池',
+        )
     );
 }

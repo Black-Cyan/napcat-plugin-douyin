@@ -30,6 +30,10 @@ export interface PluginConfig {
     maxVideoSizeMb: number;
     /** 去重时间窗口（秒），同群同链接在窗口内不重复发送 */
     dedupSeconds: number;
+    /** 资源缓存时间（天），过 0 点算一天 */
+    cacheDays: number;
+    /** 每天清除缓存时间，HH:mm */
+    cacheClearTime: string;
     /** 按群的单独配置 */
     groupConfigs: Record<string, GroupConfig>;
 }

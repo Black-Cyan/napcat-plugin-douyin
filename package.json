@@ -1,7 +1,7 @@
 {
   "name": "napcat-plugin-douyin",
   "plugin": "抖音视频解析",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "main": "index.mjs",
   "description": "解析分享的抖音视频链接，获取视频信息和原视频并发送到群聊中。",

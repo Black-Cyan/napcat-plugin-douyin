@@ -21,6 +21,8 @@ export interface PluginConfig {
     douyinVideoSendMode: 'forward' | 'direct'
     maxVideoSizeMb: number
     dedupSeconds: number
+    cacheDays: number
+    cacheClearTime: string
     groupConfigs?: Record<string, GroupConfig>
 }
 
@@ -40,4 +42,20 @@ export interface ApiResponse<T = unknown> {
     code: number
     data?: T
     message?: string
+}
+
+export interface CachePreviewEntry {
+    url: string
+    type: 'video' | 'image'
+    author: string
+    desc: string
+    sizeMb: number | null
+    cachedAt: number
+    sourceUrl: string
+}
+
+export interface CachePreviewData {
+    total: number
+    stringPool: number
+    entries: CachePreviewEntry[]
 }

@@ -15,7 +15,7 @@
  *   plugin_set_config         → 自定义配置保存
  *   plugin_on_config_change   → 配置变更回调
  *
- * @author Your Name
+ * @author Black Cyan
  * @license MIT
  */
 
@@ -31,6 +31,7 @@ import { buildConfigSchema } from './config';
 import { pluginState } from './core/state';
 import { handleMessage } from './handlers/message-handler';
 import { registerApiRoutes } from './services/api-service';
+import { initDouyinCacheScheduler, refreshDouyinCacheSchedule } from './services/douyin-service';
 import type { PluginConfig } from './types';
 
 // ==================== 配置 UI Schema ====================
@@ -48,6 +49,9 @@ export const plugin_init: PluginModule['plugin_init'] = async (ctx) => {
     try {
         // 1. 初始化全局状态（加载配置）
         pluginState.init(ctx);
+
+        // 1.1 初始化缓存调度
+        initDouyinCacheScheduler();
 
         ctx.logger.info('抖音解析插件初始化中...');
 
@@ -110,6 +114,7 @@ export const plugin_get_config: PluginModule['plugin_get_config'] = async (ctx) 
 /** 设置配置（完整替换，由 NapCat WebUI 调用） */
 export const plugin_set_config: PluginModule['plugin_set_config'] = async (ctx, config) => {
     pluginState.replaceConfig(config as PluginConfig);
+    refreshDouyinCacheSchedule();
     ctx.logger.info('配置已通过 WebUI 更新');
 };
 
@@ -122,6 +127,7 @@ export const plugin_on_config_change: PluginModule['plugin_on_config_change'] = 
 ) => {
     try {
         pluginState.updateConfig({ [key]: value });
+        refreshDouyinCacheSchedule();
         ctx.logger.debug(`配置项 ${key} 已更新`);
     } catch (err) {
         ctx.logger.error(`更新配置项 ${key} 失败:`, err);

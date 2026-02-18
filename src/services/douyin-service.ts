@@ -55,6 +55,19 @@ const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 10; Pixel 5 Build/QQ3A.200805.001
 const GROUP_FILE_SIZE_LIMIT_MB = 100;
 const dedupMap = new Map<string, number>();
 
+interface CacheRecord {
+    url: string;
+    info: DouyinVideoInfo;
+    sizeMb: number | null;
+    cachedAt: number;
+}
+
+const CACHE_FILE = 'douyin-cache.json';
+const CACHE_CLEAR_TIMER_ID = 'douyin-cache-clear';
+let cacheLoaded = false;
+let cacheMap: Map<string, CacheRecord> = new Map();
+let stringCache: Set<string> = new Set();
+
 type VideoSendMode = 'inline' | 'text_only' | 'upload_group_file';
 
 function extractDouyinUrls(text: string): string[] {
@@ -69,6 +82,182 @@ function extractDouyinUrls(text: string): string[] {
                 return false;
             }
         });
+}
+
+function normalizeDouyinUrl(raw: string): string {
+    try {
+        const url = new URL(raw.trim());
+        url.hash = '';
+        return url.toString();
+    } catch {
+        return raw.trim();
+    }
+}
+
+function startOfDay(ts: number): number {
+    const d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+}
+
+function isCacheExpired(cachedAt: number): boolean {
+    const days = Math.max(0, pluginState.config.cacheDays || 0);
+    if (days <= 0) return true;
+    const today = startOfDay(Date.now());
+    const cachedDay = startOfDay(cachedAt);
+    const diffDays = (today - cachedDay) / (24 * 60 * 60 * 1000);
+    return diffDays >= days;
+}
+
+function ensureCacheLoaded(): void {
+    if (cacheLoaded) return;
+    const stored = pluginState.loadDataFile<{ entries: CacheRecord[]; stringPool: string[] }>(
+        CACHE_FILE,
+        { entries: [], stringPool: [] },
+    );
+    cacheMap = new Map((stored.entries || []).map((e) => [e.url, e]));
+    stringCache = new Set(stored.stringPool || []);
+    cacheLoaded = true;
+    pruneExpiredCache();
+}
+
+function persistCache(): void {
+    pluginState.saveDataFile(CACHE_FILE, {
+        entries: Array.from(cacheMap.values()),
+        stringPool: Array.from(stringCache),
+    });
+}
+
+function pruneExpiredCache(): void {
+    ensureCacheLoaded();
+    let removed = 0;
+    for (const [url, entry] of cacheMap) {
+        if (isCacheExpired(entry.cachedAt)) {
+            cacheMap.delete(url);
+            stringCache.delete(url);
+            removed++;
+        }
+    }
+    if (removed > 0) {
+        persistCache();
+        pluginState.logger.debug(`已移除过期抖音缓存 ${removed} 条`);
+    }
+}
+
+function getCachedResource(url: string): CacheRecord | null {
+    ensureCacheLoaded();
+    const key = normalizeDouyinUrl(url);
+    const entry = cacheMap.get(key);
+    if (!entry) return null;
+    if (isCacheExpired(entry.cachedAt)) {
+        cacheMap.delete(key);
+        stringCache.delete(key);
+        persistCache();
+        return null;
+    }
+    return entry;
+}
+
+function cacheResource(url: string, info: DouyinVideoInfo, sizeMb: number | null): void {
+    if (Math.max(0, pluginState.config.cacheDays || 0) <= 0) return;
+    ensureCacheLoaded();
+    const key = normalizeDouyinUrl(url);
+    const record: CacheRecord = {
+        url: key,
+        info: { ...info, sourceUrl: info.sourceUrl || key },
+        sizeMb: sizeMb ?? null,
+        cachedAt: Date.now(),
+    };
+    cacheMap.set(key, record);
+    stringCache.add(key);
+    persistCache();
+}
+
+function clearCacheInternal(): void {
+    ensureCacheLoaded();
+    const entryCount = cacheMap.size;
+    const stringCount = stringCache.size;
+    cacheMap.clear();
+    stringCache.clear();
+    persistCache();
+    pluginState.logger.info(`已清除抖音缓存资源 ${entryCount} 条，字符串池 ${stringCount} 条`);
+}
+
+function computeNextClearDelay(): number {
+    const timeStr = pluginState.config.cacheClearTime || '03:00';
+    const match = /^([0-1]?\d|2[0-3]):([0-5]\d)$/.exec(timeStr.trim());
+    if (!match) return 24 * 60 * 60 * 1000;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const now = new Date();
+    const target = new Date();
+    target.setHours(hours, minutes, 0, 0);
+    if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+    }
+    return target.getTime() - now.getTime();
+}
+
+function scheduleDailyCacheClear(): void {
+    ensureCacheLoaded();
+    const existing = pluginState.timers.get(CACHE_CLEAR_TIMER_ID);
+    if (existing) {
+        clearTimeout(existing as NodeJS.Timeout);
+        pluginState.timers.delete(CACHE_CLEAR_TIMER_ID);
+    }
+
+    const delay = computeNextClearDelay();
+    const timer = setTimeout(() => {
+        clearCacheInternal();
+        scheduleDailyCacheClear();
+    }, delay);
+
+    pluginState.timers.set(CACHE_CLEAR_TIMER_ID, timer as never);
+    pluginState.logger.info(`缓存清理任务已安排，将在 ${(delay / 60000).toFixed(1)} 分钟后执行`);
+}
+
+export function initDouyinCacheScheduler(): void {
+    ensureCacheLoaded();
+    scheduleDailyCacheClear();
+}
+
+export function refreshDouyinCacheSchedule(): void {
+    pruneExpiredCache();
+    scheduleDailyCacheClear();
+}
+
+export function clearDouyinCacheNow(): void {
+    clearCacheInternal();
+    scheduleDailyCacheClear();
+}
+
+export function getDouyinCachePreview(): {
+    total: number;
+    stringPool: number;
+    entries: Array<{
+        url: string;
+        type: DouyinVideoInfo['type'];
+        author: string;
+        desc: string;
+        sizeMb: number | null;
+        cachedAt: number;
+        sourceUrl: string;
+    }>;
+} {
+    ensureCacheLoaded();
+    pruneExpiredCache();
+    const entries = Array.from(cacheMap.values())
+        .sort((a, b) => b.cachedAt - a.cachedAt)
+        .map((e) => ({
+            url: e.url,
+            type: e.info.type,
+            author: e.info.author,
+            desc: e.info.desc || '',
+            sizeMb: e.sizeMb,
+            cachedAt: e.cachedAt,
+            sourceUrl: e.info.sourceUrl,
+        }));
+    return { total: entries.length, stringPool: stringCache.size, entries };
 }
 
 async function fetchVideoSizeMb(url: string): Promise<number | null> {
@@ -421,16 +610,8 @@ export async function processDouyinShare(
     pluginState.logger.info(`检测到抖音链接，开始解析 | 群 ${groupId}`);
 
     for (const url of urls) {
-        const info = await fetchViaXhusApi(url);
-        if (!info) {
-            if (pluginState.config.debug) {
-                pluginState.logger.debug('未能解析抖音链接: ' + url);
-            }
-            continue;
-        }
-
-        // 去重：同群同链接在窗口内不重复发送
-        const dedupKey = `${groupId}:${url}`;
+        const normalizedUrl = normalizeDouyinUrl(url);
+        const dedupKey = `${groupId}:${normalizedUrl}`;
         const dedupWindow = (pluginState.config.dedupSeconds || 0) * 1000;
         if (dedupWindow > 0) {
             const last = dedupMap.get(dedupKey) || 0;
@@ -438,6 +619,37 @@ export async function processDouyinShare(
                 pluginState.logger.info(`检测到重复链接，已跳过 | 群 ${groupId}`);
                 continue;
             }
+        }
+
+        const cached = getCachedResource(normalizedUrl);
+        if (cached) {
+            pluginState.logger.info(`命中抖音缓存，直接发送 | 群 ${groupId}`);
+            let cachedMode: VideoSendMode = 'inline';
+            if (cached.info.type === 'video') {
+                const limitMb = pluginState.config.maxVideoSizeMb || 0;
+                if (cached.sizeMb !== null && cached.sizeMb > GROUP_FILE_SIZE_LIMIT_MB) {
+                    cachedMode = 'upload_group_file';
+                } else if (limitMb > 0 && cached.sizeMb !== null && cached.sizeMb > limitMb) {
+                    cachedMode = 'text_only';
+                }
+            }
+            const sentFromCache = await sendForwardVideo(ctx, groupId, cached.info, cachedMode, cached.sizeMb);
+            if (sentFromCache) {
+                pluginState.incrementProcessed();
+                dedupMap.set(dedupKey, Date.now());
+                if (event.message_id) {
+                    await setMsgEmojiLike(ctx, event.message_id, '124');
+                }
+                return true;
+            }
+        }
+
+        const info = await fetchViaXhusApi(normalizedUrl);
+        if (!info) {
+            if (pluginState.config.debug) {
+                pluginState.logger.debug('未能解析抖音链接: ' + normalizedUrl);
+            }
+            continue;
         }
 
         // 视频大小判定与发送模式
@@ -457,6 +669,7 @@ export async function processDouyinShare(
 
         const sent = await sendForwardVideo(ctx, groupId, info, sendMode, sizeMb);
         if (sent) {
+            cacheResource(normalizedUrl, info, sizeMb);
             pluginState.logger.info(`已解析抖音作品 ${info.awemeId} 并转发到群 ${groupId}`);
             pluginState.incrementProcessed();
             dedupMap.set(dedupKey, Date.now());

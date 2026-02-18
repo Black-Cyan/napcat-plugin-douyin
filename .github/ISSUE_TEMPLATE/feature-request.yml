@@ -1,0 +1,54 @@
+name: 🔧 功能期望
+description: 提出新功能或改进建议
+title: "[Feature] "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提交功能期望。
+        请尽量提供完整的场景与需求，便于评估和规划。
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景 / 问题
+      description: 说明你遇到的场景、痛点或希望解决的问题
+      placeholder: |-
+        例如：视频在合并转发消息中提示资源已过期，无法查看。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望的功能
+      description: 你希望插件实现什么行为？
+      placeholder: |-
+        例如：支持选择将解析的视频直接发送到群聊。
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 可选方案
+      description: 是否有替代方案或临时解决办法？
+      placeholder: |-
+        例如：多次尝试发送链接触发解析。
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 其他参考资料、截图或相关链接
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认需求描述清晰、无重复提案
+          required: true

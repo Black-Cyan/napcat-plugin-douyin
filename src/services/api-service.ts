@@ -22,6 +22,7 @@ import type {
     PluginHttpResponse
 } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../core/state';
+import { refreshDouyinCacheSchedule, getDouyinCachePreview, clearDouyinCacheNow } from './douyin-service';
 
 /**
  * 注册 API 路由
@@ -45,6 +46,20 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         });
     });
 
+    // ==================== 缓存管理（无鉴权）====================
+
+    /** 缓存预览 */
+    router.getNoAuth('/cache/preview', (_req, res) => {
+        const preview = getDouyinCachePreview();
+        res.json({ code: 0, data: preview });
+    });
+
+    /** 手动清除缓存 */
+    router.postNoAuth('/cache/clear', (_req, res) => {
+        clearDouyinCacheNow();
+        res.json({ code: 0, message: 'cache cleared' });
+    });
+
     // ==================== 配置管理（无鉴权）====================
 
     /** 获取配置 */
@@ -60,6 +75,7 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 return res.status(400).json({ code: -1, message: '请求体为空' });
             }
             pluginState.updateConfig(body as Partial<import('../types').PluginConfig>);
+            refreshDouyinCacheSchedule();
             ctx.logger.info('配置已保存');
             res.json({ code: 0, message: 'ok' });
         } catch (err) {

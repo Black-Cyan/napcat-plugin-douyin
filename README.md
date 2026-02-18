@@ -2,6 +2,10 @@
 
 本项目是一个基于 [NapCat](https://github.com/NapNeko/NapCatQQ) 的插件，实现自动解析转发的抖音链接，并直接将视频、图文作品发送到聊天中。
 
+<p align="center">
+  <img src="https://img.shields.io/github/downloads/Black-Cyan/napcat-plugin-douyin/total">
+</p>
+
 ## 功能特性 
 
 - **自动解析**：识别消息中的 `https://v.douyin.com/...` 链接，调用第三方 API 解析。 

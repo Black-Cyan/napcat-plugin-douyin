@@ -87,6 +87,20 @@ class PluginState {
         lastUpdateDay: new Date().toDateString(),
     };
 
+    /** 确保统计数据的日期是今天，跨天时重置当日计数 */
+    private syncTodayProcessed(): void {
+        const today = new Date().toDateString();
+        if (this.stats.lastUpdateDay !== today) {
+            this.stats.todayProcessed = 0;
+            this.stats.lastUpdateDay = today;
+        }
+    }
+
+    /** 供外部使用的统计数据刷新接口 */
+    refreshStatsDate(): void {
+        this.syncTodayProcessed();
+    }
+
     /** 获取上下文（确保已初始化） */
     get ctx(): NapCatPluginContext {
         if (!this._ctx) throw new Error('PluginState 尚未初始化，请先调用 init()');
@@ -206,6 +220,8 @@ class PluginState {
                 if (isObject(raw) && isObject(raw.stats)) {
                     Object.assign(this.stats, raw.stats);
                 }
+                this.syncTodayProcessed();
+                this.saveConfig();
                 this.ctx.logger.debug('已加载本地配置');
             } else {
                 this.config = { ...DEFAULT_CONFIG, groupConfigs: {} };
@@ -276,13 +292,10 @@ class PluginState {
      * 增加处理计数
      */
     incrementProcessed(): void {
-        const today = new Date().toDateString();
-        if (this.stats.lastUpdateDay !== today) {
-            this.stats.todayProcessed = 0;
-            this.stats.lastUpdateDay = today;
-        }
+        this.syncTodayProcessed();
         this.stats.todayProcessed++;
         this.stats.processed++;
+        this.saveConfig();
     }
 
     // ==================== 工具方法 ====================

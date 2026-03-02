@@ -75,7 +75,7 @@ export default function CachePage() {
                         disabled={loading}
                     >
                         <IconRefresh size={14} />
-                        {loading ? '刷新中...' : '刷新'}
+                        刷新
                     </button>
                     <button
                         className="btn text-xs px-3 py-2 bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
@@ -108,7 +108,7 @@ export default function CachePage() {
                     </div>
                     <button className="btn-ghost btn text-xs px-3 py-2" onClick={fetchPreview} disabled={loading}>
                         <IconRefresh size={13} />
-                        {loading ? '刷新中...' : '刷新'}
+                        刷新
                     </button>
                 </div>
                 <div className="overflow-x-auto">

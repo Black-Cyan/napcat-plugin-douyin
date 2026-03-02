@@ -59,3 +59,31 @@ export interface CachePreviewData {
     stringPool: number
     entries: CachePreviewEntry[]
 }
+
+export type ParseErrorType = 'api_request' | 'api_response' | 'download'
+
+export type ParseStage = 'init' | 'requesting' | 'api_ready' | 'cache_hit' | 'downloading' | 'sending' | 'completed'
+
+export type ParseStatus = 'pending' | 'parsing' | 'success' | 'failed'
+
+export interface ParseLogEntry {
+    time: number
+    message: string
+}
+
+export interface ParseRecord {
+    id: string
+    url: string
+    normalizedUrl: string
+    groupId: string
+    status: ParseStatus
+    stage: ParseStage
+    progress: number
+    attempts: number
+    maxAttempts: number
+    message?: string
+    errorType?: ParseErrorType
+    createdAt: number
+    updatedAt: number
+    logs: ParseLogEntry[]
+}

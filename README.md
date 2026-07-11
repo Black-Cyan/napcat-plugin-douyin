@@ -39,7 +39,7 @@
 git clone https://github.com/Black-Cyan/napcat-plugin-douyin.git
 # ssh
 git clone git@github.com:Black-Cyan/napcat-plugin-douyin.git
-cd napcat-plugin-bilibili
+cd napcat-plugin-douyin
 ```
 
 2. 安装依赖并进行构建：

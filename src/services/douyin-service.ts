@@ -4,6 +4,7 @@ import { Readable } from 'stream';
 import type { OB11Message } from 'napcat-types/napcat-onebot';
 import type { NapCatPluginContext } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../core/state';
+import { fetchDouyinVideoInfo, setDouyinApiLogger, type FetchDouyinResult } from '../lib/douyin-api';
 
 async function setMsgEmojiLike(
     ctx: NapCatPluginContext,
@@ -37,24 +38,6 @@ interface DouyinVideoInfo {
     sourceUrl: string;
 }
 
-interface XhusApiResponse {
-    code?: number;
-    msg?: string;
-    data?: {
-        author?: string;
-        uid?: string | number;
-        avatar?: string;
-        like?: number;
-        time?: number;
-        title?: string;
-        cover?: string;
-        images?: string[] | string;
-        url?: string;
-        music?: unknown;
-    };
-}
-
-const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 10; Pixel 5 Build/QQ3A.200805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.0.0 Mobile Safari/537.36';
 const GROUP_FILE_SIZE_LIMIT_MB = 100;
 const dedupMap = new Map<string, number>();
 
@@ -428,16 +411,6 @@ async function fetchVideoSizeMb(url: string): Promise<number | null> {
     }
 }
 
-function applyQualityToUrl(playUrl: string): string {
-    try {
-        const url = new URL(playUrl);
-        const quality = pluginState.config.douyinVideoQuality === 'high' ? '1080p' : '720p';
-        url.searchParams.set('ratio', quality);
-        return url.toString();
-    } catch {
-        return playUrl;
-    }
-}
 
 interface FetchVideoResult {
     ok: boolean;
@@ -446,83 +419,44 @@ interface FetchVideoResult {
     message?: string;
 }
 
-async function fetchViaXhusApi(shareUrl: string): Promise<FetchVideoResult> {
-    const api = `http://api.xhus.cn/api/douyin?url=${encodeURIComponent(shareUrl)}`;
-    try {
-        const res = await fetch(api, { headers: { 'User-Agent': MOBILE_UA } });
-        const raw = await res.text();
-        if (!res.ok) {
-            const snippet = raw ? raw.slice(0, 300) : '';
-            const msg = `xhus 接口响应异常: ${res.status}${snippet ? ` | body: ${snippet}` : ''}`;
-            pluginState.logger.warn(msg);
-            return { ok: false, errorType: 'api_request', message: msg };
-        }
-
-        const trimmed = raw.trim();
-        if (trimmed.startsWith('<') || trimmed.includes('waf_js') || trimmed.includes('Please wait')) {
-            const msg = '解析接口返回异常（疑似风控/HTML 验证页）';
-            pluginState.logger.warn(msg, trimmed.slice(0, 200));
-            return { ok: false, errorType: 'api_response', message: msg };
-        }
-
-        let json: XhusApiResponse | null = null;
-        try {
-            json = trimmed ? JSON.parse(trimmed) as XhusApiResponse : null;
-        } catch (parseErr) {
-            const msg = '解析 xhus 接口 JSON 失败';
-            pluginState.logger.warn(msg + ':', parseErr, trimmed.slice(0, 200));
-            return { ok: false, errorType: 'api_response', message: `${msg}: ${String(parseErr)}` };
-        }
-        if (!json || json.code !== 200 || !json.data) {
-            const msg = `解析接口返回异常 code=${json?.code ?? 'null'} msg=${json?.msg ?? ''}`;
-            pluginState.logger.warn(msg, json);
-            return { ok: false, errorType: 'api_response', message: msg };
-        }
-        const data = json.data;
-        const awemeId = String(data.uid ?? Date.now());
-        const author = data.author || '抖音';
-        const desc = data.title || '';
-        const likeNum = typeof data.like === 'number' ? data.like : Number(data.like);
-        const likes = Number.isFinite(likeNum) ? likeNum : undefined;
-        const images = Array.isArray(data.images) ? data.images.filter(Boolean) as string[] : null;
-        if (images && images.length) {
-            return {
-                ok: true,
-                info: {
-                    awemeId,
-                    desc,
-                    author,
-                    images,
-                    cover: data.cover,
-                    likes,
-                    type: 'image',
-                    sourceUrl: shareUrl,
-                },
-            };
-        }
-        if (!data.url) {
-            const msg = '接口未返回视频链接';
-            return { ok: false, errorType: 'api_response', message: msg };
-        }
-        const playUrl = applyQualityToUrl(data.url);
-        return {
-            ok: true,
-            info: {
-                awemeId,
-                desc,
-                author,
-                playUrl,
-                cover: data.cover,
-                likes,
-                type: 'video',
-                sourceUrl: shareUrl,
-            },
-        };
-    } catch (err) {
-        const msg = `调用 xhus 解析接口失败: ${String(err)}`;
-        pluginState.logger.error(msg);
-        return { ok: false, errorType: 'api_request', message: msg };
+async function fetchViaNewApi(shareUrl: string): Promise<FetchVideoResult> {
+    // 初始化日志桥接（仅首次）
+    if (!(globalThis as Record<string, unknown>).__douyinApiLoggerSet) {
+        setDouyinApiLogger({
+            debug: (...args: unknown[]) => pluginState.logger.debug('[DouyinAPI]', ...args),
+            info: (...args: unknown[]) => pluginState.logger.info('[DouyinAPI]', ...args),
+            warn: (...args: unknown[]) => pluginState.logger.warn('[DouyinAPI]', ...args),
+            error: (...args: unknown[]) => pluginState.logger.error('[DouyinAPI]', ...args),
+        });
+        (globalThis as Record<string, unknown>).__douyinApiLoggerSet = true;
     }
+
+    const quality = pluginState.config.douyinVideoQuality || 'standard';
+    const result: FetchDouyinResult = await fetchDouyinVideoInfo(shareUrl, quality);
+
+    if (!result.ok || !result.info) {
+        return {
+            ok: false,
+            errorType: result.errorType || 'api_request',
+            message: result.message || '解析接口返回为空',
+        };
+    }
+
+    // 统一字段：DouyinVideoDetail -> DouyinVideoInfo
+    return {
+        ok: true,
+        info: {
+            awemeId: result.info.awemeId,
+            desc: result.info.desc,
+            author: result.info.author,
+            playUrl: result.info.playUrl,
+            images: result.info.images,
+            cover: result.info.cover,
+            likes: result.info.likes,
+            type: result.info.type,
+            sourceUrl: result.info.sourceUrl,
+        },
+    };
 }
 
 interface ForwardNode {
@@ -778,7 +712,7 @@ async function handleSingleUrl(
         const needApi = !latestInfo || lastErrorType === 'api_request' || lastErrorType === 'api_response';
         if (needApi) {
             updateParseRecord(record, { stage: 'requesting', progress: 25, message: `第 ${attempt} 次请求解析接口` }, `第 ${attempt} 次请求解析接口`);
-            const apiRes = await fetchViaXhusApi(normalizedUrl);
+            const apiRes = await fetchViaNewApi(normalizedUrl);
             if (!apiRes.ok || !apiRes.info) {
                 const errType = apiRes.errorType || 'api_request';
                 const msg = apiRes.message || '解析接口返回为空';

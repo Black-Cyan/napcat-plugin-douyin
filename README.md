@@ -10,7 +10,7 @@
 
 ## 功能特性 
 
-- **自动解析**：识别消息中的 `https://v.douyin.com/...` 链接，调用第三方 API 解析。 
+- **自动解析**：识别消息中的 `https://v.douyin.com/...` 链接，自行调用抖音 Web 接口解析。 
 - **作品详情**：展示作品作者与简介。 
 - **图文内容**：按照原作品顺序发送图片。 
 
@@ -61,7 +61,7 @@ pnpm run build
 
 - [napcat-plugin-bilibili](https://github.com/AQiaoYo/napcat-plugin-bilibili) - 插件架构参考。
 
-- [xhus 抖音解析接口](https://api.xhus.cn/doc/douyin.html) - 抖音解析接口。
+- [Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API) - 参考项目，抖音接口解析实现参考。
 
 ## 许可证
 
